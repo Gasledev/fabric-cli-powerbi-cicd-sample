@@ -1,0 +1,42 @@
+name: auto-pr-on-bpa
+
+on:
+  push:
+    branches:
+      - 'feature/**'
+      - 'features/**'
+
+jobs:
+  bpa:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run Semantic Model BPA
+        run: .\scripts\bpa-semanticmodel.ps1 -path "." -src "./src/*.SemanticModel"
+
+      - name: Run Report BPA
+        run: .\scripts\bpa-report.ps1 -path "." -src "./src/*.Report"
+
+  create_pr:
+    needs: bpa
+    if: success()               # ← IMPORTANT : seulement si BPA est validé
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create Pull Request to main
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref_name }}         # la branche feature actuelle
+          base: main
+          title: "Auto PR after BPA success — ${{ github.ref_name }}"
+          body: |
+            This PR was automatically created because the BPA successfully validated branch **${{ github.ref_name }}**.
+            Please review and merge manually.
+          draft: false
