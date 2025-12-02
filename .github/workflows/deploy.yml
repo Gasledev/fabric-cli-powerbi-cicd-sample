@@ -1,20 +1,83 @@
-- name: 🚀 Deploy to Fabric (DEV or PROD)
-  if: always()
-  env:
-    FABRIC_CLIENT_ID: ${{ secrets.FABRIC_CLIENT_ID }}
-    FABRIC_CLIENT_SECRET: ${{ secrets.FABRIC_CLIENT_SECRET }}
-    FABRIC_TENANT_ID: ${{ secrets.FABRIC_TENANT_ID }}
-  run: |
-    if [ "${{ env.environment }}" = "dev" ]; then
-      echo "Deploying to DEV..."
-      python scripts/deploy-dev.py \
-        --workspace "${{ env.workspace }}" \
-        --capacity "${{ env.capacity }}" \
-        --admin-upns "${{ env.admin_upns }}"
-    else
-      echo "Deploying to PROD..."
-      python scripts/deploy-prd.py \
-        --workspace "${{ env.workspace }}" \
-        --capacity "${{ env.capacity }}" \
-        --admin-upns "${{ env.admin_upns }}"
-    fi
+name: deploy
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        required: true
+        default: "dev"
+        options:
+          - dev
+          - prd
+      workspace:
+        type: string
+        required: true
+        default: "MyWorkspace"
+      capacity:
+        type: string
+        required: false
+        default: ""
+      admin_upns:
+        type: string
+        required: false
+        default: ""
+
+env:
+  environment: ${{ github.event.inputs.environment == '' && 'dev' || github.event.inputs.environment }}
+  workspace: ${{ github.event.inputs.workspace == '' && 'MyWorkspace' || github.event.inputs.workspace }}
+  capacity: ${{ github.event.inputs.capacity == '' && vars.FABRIC_CAPACITY || github.event.inputs.capacity }}
+  admin_upns: ${{ github.event.inputs.admin_upns == '' && vars.FABRIC_ADMIN_UPNS || github.event.inputs.admin_upns }}
+
+jobs:
+
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🐍 Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests
+
+      - name: 🚀 Deploy to Fabric (DEV or PROD)
+        env:
+          FABRIC_CLIENT_ID: ${{ secrets.FABRIC_CLIENT_ID }}
+          FABRIC_CLIENT_SECRET: ${{ secrets.FABRIC_CLIENT_SECRET }}
+          FABRIC_TENANT_ID: ${{ secrets.FABRIC_TENANT_ID }}
+          FABRIC_ENV: ${{ env.environment }}
+          FABRIC_WORKSPACE: ${{ env.workspace }}
+          FABRIC_CAPACITY: ${{ env.capacity }}
+          FABRIC_ADMIN_UPNS: ${{ env.admin_upns }}
+        run: |
+          echo "=== 📦 Starting Fabric Deployment ==="
+          echo "Environment : $FABRIC_ENV"
+          echo "Workspace   : $FABRIC_WORKSPACE"
+          echo "Capacity    : $FABRIC_CAPACITY"
+          echo "Admins      : $FABRIC_ADMIN_UPNS"
+          echo ""
+
+          if [ "$FABRIC_ENV" = "dev" ]; then
+            echo "🚀 Deploying to DEV workspace..."
+            python scripts/deploy-dev.py \
+              --workspace "$FABRIC_WORKSPACE" \
+              --capacity "$FABRIC_CAPACITY" \
+              --admin-upns "$FABRIC_ADMIN_UPNS"
+          else
+            echo "🚀 Deploying to PROD workspace..."
+            python scripts/deploy-prd.py \
+              --workspace "$FABRIC_WORKSPACE" \
+              --capacity "$FABRIC_CAPACITY" \
+              --admin-upns "$FABRIC_ADMIN_UPNS"
+          fi
+
+          echo "🎉 Fabric deployment finished."
