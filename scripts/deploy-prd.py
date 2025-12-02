@@ -14,23 +14,27 @@ workspace = args.workspace
 capacity = args.capacity
 admin_upns = args.admin_upns
 
-# Auth
+print("=== 🚀 DEPLOY TO PROD ===")
+
+# 1) Authenticate
 if args.spn_auth:
     fab_authenticate_spn()
 
-# Create workspace
+# 2) Ensure workspace exists
 workspace_id = create_workspace(workspace, capacity, upns=[admin_upns])
 
-# Deploy semantic model
-semantic_id = deploy_item(
+# 3) Deploy Semantic Model
+print("📦 Deploying Semantic Model...")
+deploy_item(
     "src/CleanModel.SemanticModel",
     workspace_name=workspace
 )
 
-# Deploy report
+# 4) Deploy Report
+print("📊 Deploying Report...")
 deploy_item(
     "src/CleanReport.Report",
     workspace_name=workspace
 )
 
-print("Deployment to PROD completed successfully.")
+print("🎉 Deployment to PROD completed successfully.")
