@@ -1,4 +1,4 @@
-name: bpa
+name: 🚦 BPA Quality Check
 
 on:
   push:
@@ -10,17 +10,18 @@ on:
       - "features/**"
 
   workflow_dispatch:
-        
+
 jobs:
-  bpa:   
+  run-bpa-checks:                     # anciennement: bpa
+    name: 🧪 Run Power BI Best Practices
     runs-on: windows-latest
     
     steps:
-      - name: Check out the code
+      - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      - name: Semantic Models BPA
+      - name: 📊 Semantic Model – BPA Analysis
         run: .\scripts\bpa-semanticmodel.ps1 -path "." -src "./src/*.SemanticModel"
       
-      - name: Reports BPA
+      - name: 📈 Report – BPA Analysis
         run: .\scripts\bpa-report.ps1 -path "." -src "./src/*.Report"
