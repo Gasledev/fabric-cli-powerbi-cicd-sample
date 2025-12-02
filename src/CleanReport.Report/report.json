@@ -1,0 +1,10 @@
+{
+  "name": "CleanReport",
+  "sections": [
+    {
+      "name": "Page1",
+      "displayName": "Page 1",
+      "ordinal": 0
+    }
+  ]
+}
