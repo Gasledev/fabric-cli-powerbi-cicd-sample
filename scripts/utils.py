@@ -42,7 +42,13 @@ def fab_authenticate_spn():
     if not client_id or not client_secret or not tenant_id:
         raise Exception("Missing Fabric SPN environment variables.")
 
-    # OFFICIAL SPN LOGIN SYNTAX (from Microsoft)
+    # ⚙️ Fix pour le cache chiffré → active le fallback en clair
+    # Message d’erreur :
+    # x [UnexpectedError] An error occurred with the encrypted cache.
+    # Enable plaintext auth token fallback with 'config set encryption_fallback_enabled true'
+    run_fab_command("config set encryption_fallback_enabled true")
+
+    # OFFICIAL SPN LOGIN SYNTAX (from Fabric CLI README)
     run_fab_command(
         f"auth login -u {client_id} -p {client_secret} --tenant {tenant_id}"
     )
@@ -74,7 +80,9 @@ def create_workspace(workspace_name, capacity=None, upns=None):
     print(f"Workspace created → {ws_id}")
 
     if upns:
-        for u in upns.split(","):
+        # support chaîne type "user1@x;user2@y" ou "user1,user2"
+        sep = ";" if ";" in upns else ","
+        for u in [x.strip() for x in upns.split(sep) if x.strip()]:
             run_fab_command(
                 f"workspace user assign --workspace-id {ws_id} --user {u} --role Admin"
             )
