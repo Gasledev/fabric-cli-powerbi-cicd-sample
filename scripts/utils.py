@@ -22,8 +22,8 @@ def run_fab_command(cmd):
         raise Exception(
             f"Error running fab command.\n"
             f"Exit code: {process.returncode}\n"
-            f"Stdout: {process.stdout}\n"
-            f"Stderr: {process.stderr}"
+            f"Stdout:\n{process.stdout}\n"
+            f"Stderr:\n{process.stderr}"
         )
 
     return process.stdout
@@ -42,7 +42,7 @@ def fab_authenticate_spn():
     if not client_id or not client_secret or not tenant_id:
         raise Exception("Missing Fabric SPN environment variables.")
 
-    # ⬅️ COMMANDE À JOUR
+    # ✅ CORRECT FABRIC CLI COMMAND
     run_fab_command(
         f"auth login "
         f"--client-id {client_id} "
@@ -60,16 +60,17 @@ def create_workspace(workspace_name, capacity=None, upns=None):
     """Create a workspace or return its ID if it already exists."""
     print(f"Ensuring workspace exists: {workspace_name}")
 
-    # Check if workspace exists
+    # List existing workspaces
     json_out = run_fab_command("workspace list --output json")
     workspaces = json.loads(json_out)
 
+    # Return existing workspace
     for ws in workspaces:
         if ws["displayName"] == workspace_name:
             print(f"Workspace already exists: {ws['id']}")
             return ws["id"]
 
-    # Create workspace if missing
+    # Create workspace
     cmd = f"workspace create --display-name \"{workspace_name}\""
 
     if capacity:
@@ -80,7 +81,7 @@ def create_workspace(workspace_name, capacity=None, upns=None):
     ws_id = ws_data["id"]
     print(f"Workspace created → ID = {ws_id}")
 
-    # Assign admins
+    # Assign admin users
     if upns:
         for u in upns:
             run_fab_command(
@@ -101,18 +102,19 @@ def deploy_item(src_folder, workspace_name):
     if not os.path.isdir(src_folder):
         raise Exception(f"Path not found: {src_folder}")
 
-    # Create staging path
+    # Temporary staging path
     staging = f"_stg/{uuid.uuid4()}"
     os.makedirs(staging, exist_ok=True)
 
-    # Copy item folder
-    shutil.copytree(src_folder, f"{staging}/{os.path.basename(src_folder)}")
+    # Copy PBIP into staging
+    final_path = f"{staging}/{os.path.basename(src_folder)}"
+    shutil.copytree(src_folder, final_path)
 
-    # Run deployment
+    # Import item into Fabric
     output = run_fab_command(
         f"item import "
         f"--workspace \"{workspace_name}\" "
-        f"--path \"{staging}/{os.path.basename(src_folder)}\""
+        f"--path \"{final_path}\""
     )
 
     print("Deployment result:")
