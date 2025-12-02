@@ -1,70 +1,20 @@
-name: 🚀 Deploy to Fabric
-
-on:
-  workflow_dispatch:
-    inputs:
-      environment:
-        type: choice
-        required: true
-        default: dev
-        options:
-          - dev
-          - prd
-      workspace:
-        type: string
-        required: true
-        default: "MyWorkspace"
-      capacity:
-        type: string
-        required: false
-        default: ""
-      admin_upns:
-        type: string
-        required: false
-        default: ""
-
-jobs:
-  deploy:
-    name: 🌐 Deploy to Fabric (Semantic Model + Report)
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: 📥 Checkout repository
-        uses: actions/checkout@v4
-
-      - name: 🐍 Install Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.12"
-
-      - name: 📦 Install Fabric CLI 
-        run: |
-          pip install ms-fabric-cli
-          fab --version
-
-
-      - name: 📚 Install Python requirements
-        run: |
-          pip install -r scripts/requirements.txt || true
-
-      - name: 🚀 Run Deployment Script
-        env:
-          FABRIC_CLIENT_ID: ${{ secrets.FABRIC_CLIENT_ID }}
-          FABRIC_CLIENT_SECRET: ${{ secrets.FABRIC_CLIENT_SECRET }}
-          FABRIC_TENANT_ID: ${{ secrets.FABRIC_TENANT_ID }}
-        run: |
-          if [ "${{ github.event.inputs.environment }}" = "dev" ]; then
-            echo "Deploying to DEV..."
-            python scripts/deploy-dev.py \
-              --spn-auth \
-              --workspace "${{ github.event.inputs.workspace }}" \
-              --capacity "${{ github.event.inputs.capacity }}" \
-              --admin-upns "${{ github.event.inputs.admin_upns }}"
-          else
-            echo "Deploying to PROD..."
-            python scripts/deploy-prd.py \
-              --spn-auth \
-              --workspace "${{ github.event.inputs.workspace }}" \
-              --capacity "${{ github.event.inputs.capacity }}" \
-              --admin-upns "${{ github.event.inputs.admin_upns }}"
-          fi
+- name: 🚀 Deploy to Fabric (DEV or PROD)
+  if: always()
+  env:
+    FABRIC_CLIENT_ID: ${{ secrets.FABRIC_CLIENT_ID }}
+    FABRIC_CLIENT_SECRET: ${{ secrets.FABRIC_CLIENT_SECRET }}
+    FABRIC_TENANT_ID: ${{ secrets.FABRIC_TENANT_ID }}
+  run: |
+    if [ "${{ env.environment }}" = "dev" ]; then
+      echo "Deploying to DEV..."
+      python scripts/deploy-dev.py \
+        --workspace "${{ env.workspace }}" \
+        --capacity "${{ env.capacity }}" \
+        --admin-upns "${{ env.admin_upns }}"
+    else
+      echo "Deploying to PROD..."
+      python scripts/deploy-prd.py \
+        --workspace "${{ env.workspace }}" \
+        --capacity "${{ env.capacity }}" \
+        --admin-upns "${{ env.admin_upns }}"
+    fi
