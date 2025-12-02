@@ -1,113 +1,236 @@
 import os
-import subprocess
-import shutil
+import sys
+import base64
 import json
-import uuid
+from typing import List, Dict, Optional
+
+import requests
+
+# Base Fabric REST API
+FABRIC_API_BASE = "https://api.fabric.microsoft.com/v1"
 
 
-# -----------------------------------------------------------
-# 🔧 Run a Fabric CLI command
-# -----------------------------------------------------------
-def run_fab_command(cmd):
-    """Run a Fabric CLI command and fail on error."""
-    print(f"Running FAB command: fab {cmd}")
+class FabricAuthError(Exception):
+    """Authentication/Token errors."""
+    pass
 
-    process = subprocess.run(
-        ["fab"] + cmd.split(),
-        text=True,
-        capture_output=True
-    )
 
-    if process.returncode != 0:
-        raise Exception(
-            f"Error running fab command.\n"
-            f"Exit code: {process.returncode}\n"
-            f"Stdout:\n{process.stdout}\n"
-            f"Stderr:\n{process.stderr}"
+class FabricApiError(Exception):
+    """Fabric REST API call errors."""
+    pass
+
+
+def _get_env_or_fail(name: str) -> str:
+    """Get an env var or raise a clear error."""
+    value = os.getenv(name)
+    if not value:
+        raise FabricAuthError(f"Missing environment variable: {name}")
+    return value
+
+
+def get_access_token_spn() -> str:
+    """
+    Récupère un access token Microsoft Entra pour Fabric en client_credentials
+    (Service Principal) vers le scope Fabric: https://api.fabric.microsoft.com/.default
+    """
+    tenant_id = _get_env_or_fail("FABRIC_TENANT_ID")
+    client_id = _get_env_or_fail("FABRIC_CLIENT_ID")
+    client_secret = _get_env_or_fail("FABRIC_CLIENT_SECRET")
+
+    token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+    data = {
+        "grant_type": "client_credentials",
+        "client_id": client_id,
+        "client_secret": client_secret,
+        # Scope générique pour les APIs Fabric en client credentials
+        # cf. discussions communautaires :contentReference[oaicite:1]{index=1}
+        "scope": "https://api.fabric.microsoft.com/.default",
+    }
+
+    resp = requests.post(token_url, data=data)
+    if resp.status_code != 200:
+        raise FabricAuthError(
+            f"Failed to acquire token. HTTP {resp.status_code}: {resp.text}"
         )
 
-    return process.stdout
+    token = resp.json().get("access_token")
+    if not token:
+        raise FabricAuthError("Token response does not contain 'access_token'.")
+    return token
 
 
-# -----------------------------------------------------------
-# 🔐 Authenticate with Service Principal (OFFICIAL SYNTAX)
-# -----------------------------------------------------------
-def fab_authenticate_spn():
-    print("Authenticating with SPN...")
+def fabric_request(method: str, path: str, token: str, **kwargs) -> requests.Response:
+    """
+    Appelle l’API Fabric REST (Core) :
+      - Ajoute automatiquement le header Authorization: Bearer <token>
+      - Lève une exception si le status HTTP n’est pas 2xx
+    """
+    url = f"{FABRIC_API_BASE}/{path.lstrip('/')}"
+    headers = kwargs.pop("headers", {})
+    headers["Authorization"] = f"Bearer {token}"
 
-    client_id = os.getenv("FABRIC_CLIENT_ID")
-    client_secret = os.getenv("FABRIC_CLIENT_SECRET")
-    tenant_id = os.getenv("FABRIC_TENANT_ID")
+    # Si on envoie un body, on s’assure du content-type JSON
+    if "json" in kwargs and "Content-Type" not in headers:
+        headers["Content-Type"] = "application/json"
 
-    if not client_id or not client_secret or not tenant_id:
-        raise Exception("Missing Fabric SPN environment variables.")
+    print(f"Calling Fabric API: {method} {url}")
+    resp = requests.request(method, url, headers=headers, **kwargs)
 
-    # ⚙️ Fix pour le cache chiffré → active le fallback en clair
-    # Message d’erreur :
-    # x [UnexpectedError] An error occurred with the encrypted cache.
-    # Enable plaintext auth token fallback with 'config set encryption_fallback_enabled true'
-    run_fab_command("config set encryption_fallback_enabled true")
+    if not resp.ok:
+        raise FabricApiError(
+            f"{method} {url} failed. "
+            f"HTTP {resp.status_code}: {resp.text}"
+        )
 
-    # OFFICIAL SPN LOGIN SYNTAX (from Fabric CLI README)
-    run_fab_command(
-        f"auth login -u {client_id} -p {client_secret} --tenant {tenant_id}"
-    )
-
-    print("SPN authentication successful.")
+    return resp
 
 
-# -----------------------------------------------------------
-# 🏢 Create or retrieve workspace
-# -----------------------------------------------------------
-def create_workspace(workspace_name, capacity=None, upns=None):
-    print(f"Ensuring workspace exists: {workspace_name}")
+def get_or_create_workspace(
+    workspace_name: str,
+    token: str,
+    capacity_id: Optional[str] = None,
+) -> str:
+    """
+    1. Liste les workspaces (GET /workspaces) :contentReference[oaicite:2]{index=2}
+    2. Si un workspace avec displayName == workspace_name existe -> retourne son id
+    3. Sinon, crée le workspace (POST /workspaces) :contentReference[oaicite:3]{index=3}
+    """
+    # 1. List workspaces
+    resp = fabric_request("GET", "workspaces", token)
+    data = resp.json()
 
-    raw = run_fab_command("workspace list --output json")
-    workspaces = json.loads(raw)
+    # Selon la doc Fabric, les collections sont typiquement dans 'value'
+    workspaces = data.get("value", data.get("workspaces", []))
 
     for ws in workspaces:
-        if ws["displayName"] == workspace_name:
-            print(f"Workspace already exists → {ws['id']}")
-            return ws["id"]
+        if ws.get("displayName") == workspace_name:
+            ws_id = ws.get("id")
+            print(f"Workspace '{workspace_name}' already exists (id={ws_id}).")
+            return ws_id
 
-    cmd = f"workspace create --display-name \"{workspace_name}\""
-    if capacity:
-        cmd += f" --capacity {capacity}"
+    # 2. Create workspace
+    body: Dict[str, object] = {"displayName": workspace_name}
+    if capacity_id:
+        body["capacityId"] = capacity_id
 
-    ws_data = json.loads(run_fab_command(cmd))
-    ws_id = ws_data["id"]
-
-    print(f"Workspace created → {ws_id}")
-
-    if upns:
-        # support chaîne type "user1@x;user2@y" ou "user1,user2"
-        sep = ";" if ";" in upns else ","
-        for u in [x.strip() for x in upns.split(sep) if x.strip()]:
-            run_fab_command(
-                f"workspace user assign --workspace-id {ws_id} --user {u} --role Admin"
-            )
-
+    print(f"Creating workspace '{workspace_name}'...")
+    resp = fabric_request("POST", "workspaces", token, json=body)
+    ws = resp.json()
+    ws_id = ws["id"]
+    print(f"Workspace created (id={ws_id}).")
     return ws_id
 
 
-# -----------------------------------------------------------
-# 📦 Deploy PBIP items (semantic model or report)
-# -----------------------------------------------------------
-def deploy_item(src_folder, workspace_name):
-    print(f"Deploying PBIP item → {src_folder}")
+def list_items_by_type(
+    workspace_id: str,
+    item_type: str,
+    token: str,
+) -> List[Dict]:
+    """
+    Liste les items d’un workspace filtrés par type (Report, SemanticModel, ...) :contentReference[oaicite:4]{index=4}
+      GET /workspaces/{workspaceId}/items?type={item_type}
+    """
+    path = f"workspaces/{workspace_id}/items?type={item_type}"
+    resp = fabric_request("GET", path, token)
+    data = resp.json()
+    return data.get("value", data.get("items", []))
 
-    if not os.path.isdir(src_folder):
-        raise Exception(f"PBIP folder not found: {src_folder}")
 
-    staging = f"_stg/{uuid.uuid4()}"
-    os.makedirs(staging, exist_ok=True)
+def build_definition_parts_from_folder(folder: str) -> List[Dict[str, str]]:
+    """
+    Construit la liste des 'parts' pour un Item Definition à partir d'un dossier PBIP :
+      - parcourt tous les fichiers (definition/, StaticResources/, .platform, etc.)
+      - crée un part par fichier:
+          path       = chemin relatif (style 'definition/report.json')
+          payload    = fichier encodé en base64
+          payloadType= InlineBase64 (unique valeur supportée) :contentReference[oaicite:5]{index=5}
+    """
+    parts: List[Dict[str, str]] = []
 
-    dest = f"{staging}/{os.path.basename(src_folder)}"
-    shutil.copytree(src_folder, dest)
+    for root, _, files in os.walk(folder):
+        for filename in files:
+            full_path = os.path.join(root, filename)
+            rel_path = os.path.relpath(full_path, folder).replace("\\", "/")
 
-    result = run_fab_command(
-        f"item import --workspace \"{workspace_name}\" --path \"{dest}\""
-    )
+            with open(full_path, "rb") as f:
+                content = f.read()
 
-    print(result)
-    return result
+            b64 = base64.b64encode(content).decode("ascii")
+            parts.append(
+                {
+                    "path": rel_path,
+                    "payload": b64,
+                    "payloadType": "InlineBase64",
+                }
+            )
+
+    if not parts:
+        raise ValueError(f"No files found in PBIP folder: {folder}")
+
+    return parts
+
+
+def create_or_update_item_from_folder(
+    workspace_id: str,
+    folder: str,
+    item_type: str,
+    token: str,
+) -> str:
+    """
+    Crée ou met à jour un item (Report ou SemanticModel) dans Fabric à partir d’un
+    dossier PBIP (.Report ou .SemanticModel) en utilisant Create Item / Update Definition :contentReference[oaicite:6]{index=6}
+
+    - displayName = nom du dossier sans l’extension (.Report ou .SemanticModel)
+    - On check si un item de ce type existe déjà dans le workspace:
+        - NON -> POST /workspaces/{ws}/items
+        - OUI -> POST /workspaces/{ws}/items/{itemId}/updateDefinition?updateMetadata=true
+    """
+    display_name = os.path.basename(folder)
+    # Exemple: "pbi_test.Report" -> "pbi_test"
+    if "." in display_name:
+        display_name = display_name.split(".", 1)[0]
+
+    print(f"\n=== Publishing {item_type} from folder: {folder}")
+    print(f"Item displayName = {display_name}")
+
+    parts = build_definition_parts_from_folder(folder)
+    definition = {"parts": parts}
+
+    # Recherche d’un item existant de ce type + nom
+    existing_items = list_items_by_type(workspace_id, item_type, token)
+    item_id: Optional[str] = None
+    for it in existing_items:
+        if it.get("displayName") == display_name:
+            item_id = it.get("id")
+            break
+
+    if item_id is None:
+        # Création
+        body = {
+            "displayName": display_name,
+            "type": item_type,  # "Report" ou "SemanticModel"
+            "definition": definition,
+        }
+        resp = fabric_request(
+            "POST",
+            f"workspaces/{workspace_id}/items",
+            token,
+            json=body,
+        )
+        item = resp.json()
+        item_id = item["id"]
+        print(f"✅ Created {item_type} '{display_name}' (id={item_id})")
+    else:
+        # Update du Definition (et metadata via .platform si présent)
+        body = {
+            "definition": definition,
+        }
+        resp = fabric_request(
+            "POST",
+            f"workspaces/{workspace_id}/items/{item_id}/updateDefinition?updateMetadata=true",
+            token,
+            json=body,
+        )
+        print(f"✅ Updated {item_type} '{display_name}' (id={item_id})")
+
+    return item_id
