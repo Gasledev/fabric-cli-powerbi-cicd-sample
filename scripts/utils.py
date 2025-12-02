@@ -176,17 +176,7 @@ def create_or_update_item_from_folder(
     item_type: str,
     token: str,
 ) -> str:
-    """
-    Crée ou met à jour un item (Report ou SemanticModel) dans Fabric à partir d’un
-    dossier PBIP (.Report ou .SemanticModel) en utilisant Create Item / Update Definition :contentReference[oaicite:6]{index=6}
-
-    - displayName = nom du dossier sans l’extension (.Report ou .SemanticModel)
-    - On check si un item de ce type existe déjà dans le workspace:
-        - NON -> POST /workspaces/{ws}/items
-        - OUI -> POST /workspaces/{ws}/items/{itemId}/updateDefinition?updateMetadata=true
-    """
     display_name = os.path.basename(folder)
-    # Exemple: "pbi_test.Report" -> "pbi_test"
     if "." in display_name:
         display_name = display_name.split(".", 1)[0]
 
@@ -196,57 +186,72 @@ def create_or_update_item_from_folder(
     parts = build_definition_parts_from_folder(folder)
     definition = {"parts": parts}
 
-    # Recherche d’un item existant de ce type + nom
+    # Check if exists
     existing_items = list_items_by_type(workspace_id, item_type, token)
-    item_id: Optional[str] = None
+    item_id = None
     for it in existing_items:
         if it.get("displayName") == display_name:
-            item_id = it.get("id")
+            item_id = it["id"]
             break
 
+    # -------------------------
+    # CASE 1 : CREATE
+    # -------------------------
     if item_id is None:
-        # Création
         body = {
             "displayName": display_name,
-            "type": item_type,  # "Report" ou "SemanticModel"
+            "type": item_type,
             "definition": definition,
         }
+
         resp = fabric_request(
             "POST",
             f"workspaces/{workspace_id}/items",
             token,
             json=body,
         )
-        item = None
+
+        # Try parsing JSON
         try:
             item = resp.json()
         except Exception:
             item = None
-        
-        # Vérification stricte : item doit exister ET contenir un id
+
         if not item or "id" not in item:
-            print("\n❌ ERROR: Fabric API did not return a valid item after creation.")
-            print("➡ This means the PBIP structure is invalid or incomplete.")
-            print("➡ Here is the RAW response from Fabric:")
-            print("----------------------------------------")
+            print("\n❌ FABRIC DID NOT RETURN A VALID ITEM ON CREATION")
+            print("Raw response:")
             print(resp.text)
-            print("----------------------------------------")
             raise FabricApiError(
-                f"Fabric failed to create item '{display_name}' of type '{item_type}'."
+                f"Fabric failed to create {item_type} '{display_name}'."
             )
-        
+
         item_id = item["id"]
         print(f"✅ Created {item_type} '{display_name}' (id={item_id})")
+        return item_id
 
-    else:
-        # Update du Definition (et metadata via .platform si présent)
-        body = {
-            "definition": definition,
-        }
-        item = resp.json()
-        item_id = item["id"]
-        print(...)
+    # -------------------------
+    # CASE 2 : UPDATE
+    # -------------------------
+    body = {"definition": definition}
 
-        print(f"✅ Updated {item_type} '{display_name}' (id={item_id})")
+    resp = fabric_request(
+        "POST",
+        f"workspaces/{workspace_id}/items/{item_id}/updateDefinition?updateMetadata=true",
+        token,
+        json=body,
+    )
 
+    # patch : check update response too
+    try:
+        result = resp.json()
+    except Exception:
+        result = None
+
+    if result is None:
+        print("\n⚠️ WARNING: Fabric returned NO JSON for update.")
+        print("Raw response:")
+        print(resp.text)
+        print("Continuing anyway...")
+
+    print(f"🔄 Updated {item_type} '{display_name}' (id={item_id})")
     return item_id
