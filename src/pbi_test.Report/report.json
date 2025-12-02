@@ -25,7 +25,17 @@
       "filters": "[]",
       "height": 720.00,
       "name": "73abb0b9b47d223a807d",
-      "visualContainers": [],
+      "visualContainers": [
+        {
+          "config": "{\"name\":\"0b9828517c2d033689c3\",\"layouts\":[{\"id\":0,\"position\":{\"x\":271.0865561694291,\"y\":146.15101289134438,\"z\":0,\"width\":743.7200736648251,\"height\":350.05524861878456,\"tabOrder\":0}}],\"singleVisual\":{\"visualType\":\"pivotTable\",\"projections\":{\"Rows\":[{\"queryRef\":\"financials.Country\",\"active\":true},{\"queryRef\":\"financials.Product\",\"active\":true}],\"Values\":[{\"queryRef\":\"CountNonNull(financials.Gross Sales)\"}]},\"prototypeQuery\":{\"Version\":2,\"From\":[{\"Name\":\"f\",\"Entity\":\"financials\",\"Type\":0}],\"Select\":[{\"Column\":{\"Expression\":{\"SourceRef\":{\"Source\":\"f\"}},\"Property\":\"Country\"},\"Name\":\"financials.Country\",\"NativeReferenceName\":\"Country\"},{\"Column\":{\"Expression\":{\"SourceRef\":{\"Source\":\"f\"}},\"Property\":\"Product\"},\"Name\":\"financials.Product\",\"NativeReferenceName\":\"Product\"},{\"Aggregation\":{\"Expression\":{\"Column\":{\"Expression\":{\"SourceRef\":{\"Source\":\"f\"}},\"Property\":\"Gross Sales\"}},\"Function\":5},\"Name\":\"CountNonNull(financials.Gross Sales)\",\"NativeReferenceName\":\"Gross Sales\"}]},\"expansionStates\":[{\"roles\":[\"Rows\"],\"levels\":[{\"queryRefs\":[\"financials.Country\"],\"isCollapsed\":true,\"identityKeys\":[{\"Column\":{\"Expression\":{\"SourceRef\":{\"Entity\":\"financials\"}},\"Property\":\"Country\"}}],\"isPinned\":true},{\"queryRefs\":[\"financials.Product\"],\"isCollapsed\":true,\"isPinned\":true}],\"root\":{\"identityValues\":null,\"children\":[{\"identityValues\":[{\"Literal\":{\"Value\":\"'Canada'\"}}],\"isToggled\":true}]}}],\"drillFilterOtherVisuals\":true}}",
+          "filters": "[]",
+          "height": 350.06,
+          "width": 743.72,
+          "x": 271.09,
+          "y": 146.15,
+          "z": 0.00
+        }
+      ],
       "width": 1280.00
     }
   ]
