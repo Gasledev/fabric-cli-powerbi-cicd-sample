@@ -8,7 +8,6 @@ import uuid
 # -----------------------------------------------------------
 # 🔧 Run a Fabric CLI command
 # -----------------------------------------------------------
-
 def run_fab_command(cmd):
     """Run a Fabric CLI command and fail on error."""
     print(f"Running FAB command: fab {cmd}")
@@ -31,89 +30,76 @@ def run_fab_command(cmd):
 
 
 # -----------------------------------------------------------
-# 🔐 Authenticate with Service Principal (SPN)
+# 🔐 Authenticate with Service Principal (OFFICIAL SYNTAX)
 # -----------------------------------------------------------
-
 def fab_authenticate_spn():
     print("Authenticating with SPN...")
 
-    if not os.getenv("FABRIC_CLIENT_ID") or not os.getenv("FABRIC_CLIENT_SECRET") or not os.getenv("FABRIC_TENANT_ID"):
+    client_id = os.getenv("FABRIC_CLIENT_ID")
+    client_secret = os.getenv("FABRIC_CLIENT_SECRET")
+    tenant_id = os.getenv("FABRIC_TENANT_ID")
+
+    if not client_id or not client_secret or not tenant_id:
         raise Exception("Missing Fabric SPN environment variables.")
 
-    # ⭐ Version compatible avec ton Fabric CLI
-    #   NE PAS ajouter de flags
-    run_fab_command("auth login")
+    # OFFICIAL SPN LOGIN SYNTAX (from Microsoft)
+    run_fab_command(
+        f"auth login -u {client_id} -p {client_secret} --tenant {tenant_id}"
+    )
 
     print("SPN authentication successful.")
-
-
 
 
 # -----------------------------------------------------------
 # 🏢 Create or retrieve workspace
 # -----------------------------------------------------------
-
 def create_workspace(workspace_name, capacity=None, upns=None):
-    """Create a workspace or return its ID if it already exists."""
     print(f"Ensuring workspace exists: {workspace_name}")
 
-    # List existing workspaces
     raw = run_fab_command("workspace list --output json")
     workspaces = json.loads(raw)
 
-    # Return existing workspace
     for ws in workspaces:
         if ws["displayName"] == workspace_name:
-            print(f"Workspace already exists: {ws['id']}")
+            print(f"Workspace already exists → {ws['id']}")
             return ws["id"]
 
-    # Create new workspace
     cmd = f"workspace create --display-name \"{workspace_name}\""
-
     if capacity:
         cmd += f" --capacity {capacity}"
 
     ws_data = json.loads(run_fab_command(cmd))
     ws_id = ws_data["id"]
 
-    print(f"Workspace created → ID = {ws_id}")
+    print(f"Workspace created → {ws_id}")
 
-    # Assign admins
     if upns:
-        for u in upns:
+        for u in upns.split(","):
             run_fab_command(
-                f"workspace user assign --workspace-id {ws_id} "
-                f"--user {u} --role Admin"
+                f"workspace user assign --workspace-id {ws_id} --user {u} --role Admin"
             )
 
     return ws_id
 
 
 # -----------------------------------------------------------
-# 📦 Deploy a PBIP item (Report or Semantic Model)
+# 📦 Deploy PBIP items (semantic model or report)
 # -----------------------------------------------------------
 def deploy_item(src_folder, workspace_name):
-    """Deploy any PBIP folder (SemanticModel or Report) to Fabric."""
-    print(f"Deploying item → {src_folder}")
+    print(f"Deploying PBIP item → {src_folder}")
 
     if not os.path.isdir(src_folder):
-        raise Exception(f"Item folder not found: {src_folder}")
+        raise Exception(f"PBIP folder not found: {src_folder}")
 
-    # Create staging directory
     staging = f"_stg/{uuid.uuid4()}"
     os.makedirs(staging, exist_ok=True)
 
     dest = f"{staging}/{os.path.basename(src_folder)}"
     shutil.copytree(src_folder, dest)
 
-    # Import into Fabric
-    output = run_fab_command(
-        f"item import "
-        f"--workspace \"{workspace_name}\" "
-        f"--path \"{dest}\""
+    result = run_fab_command(
+        f"item import --workspace \"{workspace_name}\" --path \"{dest}\""
     )
 
-    print("Deployment result:")
-    print(output)
-
-    return output
+    print(result)
+    return result
