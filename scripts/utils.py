@@ -243,12 +243,10 @@ def create_or_update_item_from_folder(
         body = {
             "definition": definition,
         }
-        resp = fabric_request(
-            "POST",
-            f"workspaces/{workspace_id}/items/{item_id}/updateDefinition?updateMetadata=true",
-            token,
-            json=body,
-        )
+        item = resp.json()
+        item_id = item["id"]
+        print(...)
+
         print(f"✅ Updated {item_type} '{display_name}' (id={item_id})")
 
     return item_id
