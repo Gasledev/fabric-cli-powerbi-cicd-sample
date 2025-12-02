@@ -1,0 +1,42 @@
+name: preprod
+
+on:
+  pull_request:
+    types: [closed]   # Quand le PR est fermé (merge)
+    branches:
+      - main          # uniquement les PR mergés dans main
+
+jobs:
+  create-preprod-pr:
+    if: github.event.pull_request.merged == true   # seulement si merged
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Configure Git
+        run: |
+          git config user.email "actions@github.com"
+          git config user.name "GitHub Actions"
+
+      - name: Create preprod branch from main
+        run: |
+          git checkout -b preprod-update-${{ github.run_number }}
+
+      - name: Push new preprod update branch
+        run: |
+          git push origin preprod-update-${{ github.run_number }}
+
+      - name: Create Pull Request to preprod
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          base: preprod
+          head: preprod-update-${{ github.run_number }}
+          title: "Preprod sync – update from main (#${{ github.event.pull_request.number }})"
+          body: |
+            Auto-generated PR from main after BPA validation and merge.
+            Source PR: #${{ github.event.pull_request.number }}
