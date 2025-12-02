@@ -37,11 +37,9 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: 📦 Install Fabric CLI (Binary)
+      - name: 📦 Install Fabric CLI 
         run: |
-          wget https://aka.ms/fabriccli -O fab
-          chmod +x fab
-          sudo mv fab /usr/local/bin/fab
+          pip install ms-fabric-cli
           fab --version
 
 
