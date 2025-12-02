@@ -8,6 +8,7 @@ import uuid
 # -----------------------------------------------------------
 # 🔧 Run a Fabric CLI command
 # -----------------------------------------------------------
+
 def run_fab_command(cmd):
     """Run a Fabric CLI command and fail on error."""
     print(f"Running FAB command: fab {cmd}")
@@ -32,24 +33,26 @@ def run_fab_command(cmd):
 # -----------------------------------------------------------
 # 🔐 Authenticate with Service Principal (SPN)
 # -----------------------------------------------------------
+
 def fab_authenticate_spn():
     print("Authenticating with SPN...")
 
     if not os.getenv("FABRIC_CLIENT_ID") or not os.getenv("FABRIC_CLIENT_SECRET") or not os.getenv("FABRIC_TENANT_ID"):
-        raise Exception("Missing SPN env variables.")
+        raise Exception("Missing Fabric SPN environment variables.")
 
-    # ⚠️ IMPORTANT :
-    # fab auth login MUST be called with NO FLAGS
-    # and SPN detection will happen automatically
-    run_fab_command("auth login --service-principal-secret")
+    # ⭐ Version compatible avec ton Fabric CLI
+    #   NE PAS ajouter de flags
+    run_fab_command("auth login")
 
     print("SPN authentication successful.")
+
 
 
 
 # -----------------------------------------------------------
 # 🏢 Create or retrieve workspace
 # -----------------------------------------------------------
+
 def create_workspace(workspace_name, capacity=None, upns=None):
     """Create a workspace or return its ID if it already exists."""
     print(f"Ensuring workspace exists: {workspace_name}")
