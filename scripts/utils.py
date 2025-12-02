@@ -217,9 +217,27 @@ def create_or_update_item_from_folder(
             token,
             json=body,
         )
-        item = resp.json()
+        item = None
+        try:
+            item = resp.json()
+        except Exception:
+            item = None
+        
+        # Vérification stricte : item doit exister ET contenir un id
+        if not item or "id" not in item:
+            print("\n❌ ERROR: Fabric API did not return a valid item after creation.")
+            print("➡ This means the PBIP structure is invalid or incomplete.")
+            print("➡ Here is the RAW response from Fabric:")
+            print("----------------------------------------")
+            print(resp.text)
+            print("----------------------------------------")
+            raise FabricApiError(
+                f"Fabric failed to create item '{display_name}' of type '{item_type}'."
+            )
+        
         item_id = item["id"]
         print(f"✅ Created {item_type} '{display_name}' (id={item_id})")
+
     else:
         # Update du Definition (et metadata via .platform si présent)
         body = {
