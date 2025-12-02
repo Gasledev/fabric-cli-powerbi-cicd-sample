@@ -1,40 +1,25 @@
-import os
 import argparse
-from utils import *
+from utils import fab_authenticate_spn, create_workspace, deploy_item
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--spn-auth", action="store_true", default=True)
 parser.add_argument("--workspace", default="DevWorkspace")
-parser.add_argument("--admin-upns", default=os.getenv("FABRIC_ADMIN_UPNS"))
-parser.add_argument("--capacity", default=os.getenv("FABRIC_CAPACITY"))
-
+parser.add_argument("--capacity", default=None)
+parser.add_argument("--admin-upns", default=None)
 args = parser.parse_args()
-
-workspace = args.workspace
-capacity = args.capacity
-admin_upns = args.admin_upns
 
 print("=== 🚀 DEPLOY TO DEV ===")
 
-# 1) Authenticate
-if args.spn_auth:
-    fab_authenticate_spn()
+# Authenticate
+fab_authenticate_spn()
 
-# 2) Ensure workspace exists
-workspace_id = create_workspace(workspace, capacity, upns=[admin_upns])
+# Create or get workspace
+ws_id = create_workspace(args.workspace, args.capacity, args.admin_upns)
 
-# 3) Deploy Semantic Model
-print("📦 Deploying Semantic Model...")
-deploy_item(
-    "src/CleanModel.SemanticModel",
-    workspace_name=workspace
-)
+# Deploy Semantic Model
+deploy_item("src/CleanModel.SemanticModel", args.workspace)
 
-# 4) Deploy Report
-print("📊 Deploying Report...")
-deploy_item(
-    "src/CleanReport.Report",
-    workspace_name=workspace
-)
+# Deploy Report
+deploy_item("src/CleanReport.Report", args.workspace)
 
-print("✅ Deployment to DEV completed successfully.")
+print("🎉 DEV deployment complete!")
