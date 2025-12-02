@@ -10,7 +10,7 @@ Set-Location $path
 
 if ($src) {
 
-    # Download Tabular Editor
+    # Download PBI Inspector (PBIR analysis engine)
 
     $destinationPath = "$currentFolder\_tools\PBIInspector"
 
@@ -31,33 +31,37 @@ if ($src) {
         Remove-Item $zipFile          
     }    
     
+    # Load BPA rules
     $rulesPath = "$currentFolder\bpa-report-rules.json"
 
     if (!(Test-Path $rulesPath))
     {
         Write-Host "Downloading default BPA rules"
     
-        Invoke-WebRequest -Uri "https://raw.githubusercontent.com/NatVanG/PBI-InspectorV2/refs/heads/main/Rules/Base-rules.json" -OutFile "$destinationPath\bpa-report-rules.json"
+        Invoke-WebRequest -Uri "https://raw.githubusercontent.com/NatVanG/PBI-InspectorV2/refs/heads/main/Rules/Base-rules.json" `
+            -OutFile "$destinationPath\bpa-report-rules.json"
         
         $rulesPath = "$destinationPath\bpa-report-rules.json"
     }
 
-    # Run BPA rules
+    # ================================================
+    #               FIX APPLIQUÉ ICI
+    # ================================================
 
-    $itemsFolders = Get-ChildItem  -Path $src -recurse -include ("*.pbir")
+    # Find all PBIR reports (definition.pbir)
+    $itemsFolders = Get-ChildItem -Path $src -Recurse -Filter "definition.pbir"
 
-    foreach ($itemFolder in $itemsFolders) {	
-        $itemPath = "$($itemFolder.Directory.FullName)\definition"
+    foreach ($itemFolder in $itemsFolders) {
 
-        if (!(Test-Path $itemPath)) {
-              if (!(Test-Path $itemPath)) {
-                throw "Cannot find report PBIR definition. If you are using PBIR-Legacy (report.json), please convert it to PBIR using Power BI Desktop."
-            }
-        }
+        # The actual report root is the directory containing definition.pbir
+        $itemPath = $itemFolder.Directory.FullName
 
         Write-Host "Running BPA rules for: '$itemPath'"
 
-        $process = Start-Process -FilePath "$destinationPath\win-x64\CLI\PBIRInspectorCLI.exe" -ArgumentList "-pbipreport ""$itemPath"" -rules ""$rulesPath"" -formats ""GitHub""" -NoNewWindow -Wait -PassThru    
+        $process = Start-Process `
+            -FilePath "$destinationPath\win-x64\CLI\PBIRInspectorCLI.exe" `
+            -ArgumentList "-pbipreport ""$itemPath"" -rules ""$rulesPath"" -formats ""GitHub""" `
+            -NoNewWindow -Wait -PassThru    
 
         if ($process.ExitCode -ne 0) {
             throw "Error running BPA rules for: '$itemPath'"

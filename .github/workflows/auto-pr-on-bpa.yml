@@ -1,0 +1,49 @@
+name: auto-pr-on-bpa
+
+on:
+  push:
+    paths:
+      - '**/src/*.Report/**'
+      - '**/src/*.SemanticModel/**'
+    branches:
+      - "feature/**"
+      - "features/**"
+
+  workflow_dispatch:
+
+jobs:
+
+  bpa:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: BPA Semantic Model
+        run: .\scripts\bpa-semanticmodel.ps1 -path "." -src "./src/*.SemanticModel"
+
+      - name: BPA Report
+        run: .\scripts\bpa-report.ps1 -path "." -src "./src/*.Report"
+
+
+  create_pr:
+    needs: bpa
+    if: success()        # ← IMPORTANT
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create Pull Request to main
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          branch: ${{ github.ref_name }}
+          base: main
+          title: "Auto PR after BPA success — ${{ github.ref_name }}"
+          body: |
+            BPA passed successfully on branch **${{ github.ref_name }}**.
+            This PR was auto-generated.
+          draft: false
