@@ -4,73 +4,19 @@ import subprocess
 import re
 import json
 
-def fab_authenticate_spn(
-    client_id: str = None, client_secret: str = None, tenant_id: str = None
-):
-    """
-    Authenticates with a Service Principal Name (SPN) using environment variables.
-    This function retrieves the client ID, client secret, and tenant ID from the environment
-    variables `FABRIC_CLIENT_ID`, `FABRIC_CLIENT_SECRET`, and `FABRIC_TENANT_ID` respectively.
-    It then uses these credentials to authenticate with the SPN.
-    Raises:
-        Exception: If any of the required environment variables (`FABRIC_CLIENT_ID`,
-                   `FABRIC_CLIENT_SECRET`, `FABRIC_TENANT_ID`) are not set.
-    Side Effects:
-        Executes the `run_fab_command` function to set the encryption fallback and perform the authentication.
-    """
-
+def fab_authenticate_spn():
     print("Authenticating with SPN")
 
-    if client_id is None or client_secret is None or tenant_id is None:
-        client_id = os.getenv("FABRIC_CLIENT_ID")
-        client_secret = os.getenv("FABRIC_CLIENT_SECRET")
-        tenant_id = os.getenv("FABRIC_TENANT_ID")
-
-    if not tenant_id or not client_id or not client_secret:
-        raise Exception(
-            "Environment variables FABRIC_CLIENT_ID, FABRIC_CLIENT_SECRET and FABRIC_TENANT_ID must be set"
-        )
-
-    run_fab_command("config set fab_encryption_fallback_enabled true")
-
+    # LOGIN SPN (modern command)
     run_fab_command(
-        f"auth login -u {client_id} -p {client_secret} --tenant {tenant_id}",
-        include_secrets=True,
+        f"login --client-id {os.getenv('FABRIC_CLIENT_ID')} "
+        f"--client-secret {os.getenv('FABRIC_CLIENT_SECRET')} "
+        f"--tenant-id {os.getenv('FABRIC_TENANT_ID')}"
     )
 
+    # No extra config needed anymore
+    print("SPN authentication completed.")
 
-def run_fab_command(
-    command,
-    capture_output: bool = False,
-    include_secrets: bool = False,
-    silently_continue: bool = False,
-):
-    """
-    Executes a Fabric command.
-    Parameters:
-    command (str): The Fabric command to execute.
-    capture_output (bool): If True, captures the command's output. Defaults to False.
-    include_secrets (bool): If True, includes secrets in the debug output. Defaults to False.
-    Returns:
-    str: The output of the command if capture_output is True.
-    Raises:
-    Exception: If there is an error running the Fabric command.
-    """
-
-    result = subprocess.run(
-        ["fab", "-c", command], capture_output=capture_output, text=True
-    )
-
-    if not (silently_continue) and (result.returncode > 0 or result.stderr):
-        raise Exception(
-            f"Error running fab command. exit_code: '{result.returncode}'; stderr: '{result.stderr}'"
-        )
-
-    if capture_output:
-
-        output = result.stdout.strip().split("\n")[-1]
-
-        return output
 
 
 def create_workspace(workspace_name, capacity_name: str = "none", upns: list = None):
