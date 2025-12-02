@@ -39,10 +39,11 @@ jobs:
 
       - name: 📦 Install Fabric CLI (Binary)
         run: |
-          wget https://fabriccli.blob.core.windows.net/public/fabric-cli-linux-x64 -O fab
+          wget https://aka.ms/fabriccli -O fab
           chmod +x fab
           sudo mv fab /usr/local/bin/fab
           fab --version
+
 
       - name: 📚 Install Python requirements
         run: |
