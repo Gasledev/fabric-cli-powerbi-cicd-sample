@@ -236,7 +236,7 @@ def create_or_update_item_from_folder(
 
     resp = fabric_request(
         "POST",
-        f"workspaces/{workspace_id}/items/{item_id}/updateDefinition?updateMetadata=true",
+        f"workspaces/{workspace_id}/items/{item_id}/updateDefinition?updateMetadata=false",
         token,
         json=body,
     )
