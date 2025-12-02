@@ -29,30 +29,25 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1) Checkout code
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
-      # 2) Install Python
       - name: 🐍 Install Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.12"
 
-      # 3) Install Fabric CLI (binary version)
-      - name: 📦 Install Fabric CLI
+      - name: 📦 Install Fabric CLI (Binary)
         run: |
-          wget https://aka.ms/fabriccli_linux -O fabric
-          chmod +x fabric
-          sudo mv fabric /usr/local/bin/fab
+          wget https://fabriccli.blob.core.windows.net/public/fabric-cli-linux-x64 -O fab
+          chmod +x fab
+          sudo mv fab /usr/local/bin/fab
           fab --version
 
-      # 4) Install Python dependencies (if any)
       - name: 📚 Install Python requirements
         run: |
           pip install -r scripts/requirements.txt || true
 
-      # 5) Deploy (dev or prd)
       - name: 🚀 Run Deployment Script
         env:
           FABRIC_CLIENT_ID: ${{ secrets.FABRIC_CLIENT_ID }}
