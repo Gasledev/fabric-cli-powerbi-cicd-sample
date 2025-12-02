@@ -2,9 +2,9 @@ name: preprod
 
 on:
   pull_request:
-    types: [closed]   # Quand le PR est fermé (merge)
+    types: [closed]   # Quand le PR est fermé
     branches:
-      - main          # uniquement les PR mergés dans main
+      - main          # Seulement les PR mergés dans main
 
 jobs:
   create-preprod-pr:
@@ -22,21 +22,23 @@ jobs:
           git config user.email "actions@github.com"
           git config user.name "GitHub Actions"
 
-      - name: Create preprod branch from main
+      - name: Create preprod update branch
         run: |
-          git checkout -b preprod-update-${{ github.run_number }}
+          BRANCH=preprod-update-${{ github.run_number }}
+          echo "BRANCH=$BRANCH" >> $GITHUB_ENV
+          git checkout -b $BRANCH
 
-      - name: Push new preprod update branch
+      - name: Push preprod update branch
         run: |
-          git push origin preprod-update-${{ github.run_number }}
+          git push origin $BRANCH
 
-      - name: Create Pull Request to preprod
+      - name: Create Pull Request → preprod
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          base: preprod
-          head: preprod-update-${{ github.run_number }}
+          base: preprod                               # branche cible
+          branch: ${{ env.BRANCH }}                   # branche source (remplace 'head')
           title: "Preprod sync – update from main (#${{ github.event.pull_request.number }})"
           body: |
-            Auto-generated PR from main after BPA validation and merge.
+            Auto-generated PR after BPA validation and merge into main.
             Source PR: #${{ github.event.pull_request.number }}
