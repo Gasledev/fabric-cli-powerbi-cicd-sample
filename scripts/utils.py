@@ -1,277 +1,121 @@
 import os
-import shutil
 import subprocess
-import re
+import shutil
 import json
+import uuid
 
+
+# -----------------------------------------------------------
+# 🔧 Run a Fabric CLI command
+# -----------------------------------------------------------
+def run_fab_command(cmd):
+    """Run a Fabric CLI command and fail on error."""
+    print(f"Running FAB command: fab {cmd}")
+
+    process = subprocess.run(
+        ["fab"] + cmd.split(),
+        text=True,
+        capture_output=True
+    )
+
+    if process.returncode != 0:
+        raise Exception(
+            f"Error running fab command.\n"
+            f"Exit code: {process.returncode}\n"
+            f"Stdout: {process.stdout}\n"
+            f"Stderr: {process.stderr}"
+        )
+
+    return process.stdout
+
+
+# -----------------------------------------------------------
+# 🔐 Authenticate with Service Principal (SPN)
+# -----------------------------------------------------------
 def fab_authenticate_spn():
-    print("Authenticating with SPN")
+    print("Authenticating with SPN...")
 
-    # LOGIN SPN (modern command)
+    client_id = os.getenv("FABRIC_CLIENT_ID")
+    client_secret = os.getenv("FABRIC_CLIENT_SECRET")
+    tenant_id = os.getenv("FABRIC_TENANT_ID")
+
+    if not client_id or not client_secret or not tenant_id:
+        raise Exception("Missing Fabric SPN environment variables.")
+
+    # Modern Fabric CLI login - ONLY this is needed
     run_fab_command(
-        f"login --client-id {os.getenv('FABRIC_CLIENT_ID')} "
-        f"--client-secret {os.getenv('FABRIC_CLIENT_SECRET')} "
-        f"--tenant-id {os.getenv('FABRIC_TENANT_ID')}"
+        f"login "
+        f"--client-id {client_id} "
+        f"--client-secret {client_secret} "
+        f"--tenant-id {tenant_id}"
     )
 
-    # No extra config needed anymore
-    print("SPN authentication completed.")
+    print("SPN authentication successful.")
 
 
+# -----------------------------------------------------------
+# 🏢 Create workspace (idempotent)
+# -----------------------------------------------------------
+def create_workspace(workspace_name, capacity=None, upns=None):
+    """Create a workspace or return its ID if it already exists."""
+    print(f"Ensuring workspace exists: {workspace_name}")
 
-def create_workspace(workspace_name, capacity_name: str = "none", upns: list = None):
-    """
-    Creates a new workspace with the specified name and optional capacity.
-    Additionally, assigns admin roles to the provided user principal names (UPNs).
-    Args:
-        workspace_name (str): The name of the workspace to be created.
-        capacity_name (str, optional): The name of the capacity to assign to the workspace. Defaults to None.
-        upns (list, optional): A list of user principal names to be assigned as admins to the workspace. Defaults to None.
-    Returns:
-        None
-    """
+    # Check if workspace exists
+    json_out = run_fab_command("workspace list --output json")
+    workspaces = json.loads(json_out)
 
-    print(f"::group::Creating workspace: {workspace_name}")
+    for ws in workspaces:
+        if ws["displayName"] == workspace_name:
+            print(f"Workspace already exists: {ws['id']}")
+            return ws["id"]
 
-    command = f"create /{workspace_name}.Workspace"
+    # Create workspace if missing
+    cmd = f"workspace create --display-name \"{workspace_name}\""
 
-    if capacity_name:
-        command += f" -P capacityName={capacity_name}"
+    if capacity:
+        cmd += f" --capacity {capacity}"
 
-    run_fab_command(command, silently_continue=True)
+    ws_data = json.loads(run_fab_command(cmd))
 
-    if upns is not None:
+    ws_id = ws_data["id"]
+    print(f"Workspace created → ID = {ws_id}")
 
-        upns = [x for x in upns if x.strip()]
+    # Assign admins
+    if upns:
+        for u in upns:
+            run_fab_command(
+                f"workspace user assign --workspace-id {ws_id} "
+                f"--user {u} --role Admin"
+            )
 
-        if len(upns) > 0:
-            print(f"Adding UPNs")
+    return ws_id
 
-            for upn in upns:
-                run_fab_command(
-                    f"acl set -f /{workspace_name}.Workspace -I {upn} -R admin"
-                )
 
-    workspace_id = run_fab_command(
-        f"get /{workspace_name}.Workspace -q id", capture_output=True
+# -----------------------------------------------------------
+# 📦 Deploy a PBIP item (Report or Semantic Model)
+# -----------------------------------------------------------
+def deploy_item(src_folder, workspace_name):
+    """Deploy any PBIP folder (Report or Semantic Model) to Fabric."""
+    print(f"Deploying item → {src_folder}")
+
+    if not os.path.isdir(src_folder):
+        raise Exception(f"Path not found: {src_folder}")
+
+    # Create staging path
+    staging = f"_stg/{uuid.uuid4()}"
+    os.makedirs(staging, exist_ok=True)
+
+    # Copy item folder
+    shutil.copytree(src_folder, f"{staging}/{os.path.basename(src_folder)}")
+
+    # Run deployment
+    output = run_fab_command(
+        f"item import "
+        f"--workspace \"{workspace_name}\" "
+        f"--path \"{staging}/{os.path.basename(src_folder)}\""
     )
 
-    print(f"::endgroup::")
+    print("Deployment result:")
+    print(output)
 
-    return workspace_id
-
-
-def create_connection(
-    connection_name: str = None, parameters: dict = None, upns: list = None
-):
-    """
-    Creates a connection with the specified name, parameters, and UPNs.
-    Args:
-        connection_name (str, optional): The name of the connection to create. Defaults to None.
-        parameters (dict, optional): A dictionary of parameters to include in the connection. Defaults to None.
-        upns (list, optional): A list of UPNs to add to the connection with admin rights. Defaults to None.
-    Returns:
-        str: The ID of the created connection.
-    """
-
-    print(f"::group::Creating connection {connection_name}")
-
-    if parameters:
-        param_str = ",".join(f"{key}={value}" for key, value in parameters.items())
-        param_str = f"-P {param_str}"
-    else:
-        param_str = ""
-
-    run_fab_command(
-        f"create .connections/{connection_name}.Connection {param_str}",
-        silently_continue=True,
-    )
-
-    connection_id = run_fab_command(
-        f"get .connections/{connection_name}.Connection -q id", capture_output=True
-    )
-
-    if upns is not None:
-
-        upns = [x for x in upns if x.strip()]
-
-        if len(upns) > 0:
-            print(f"Adding UPNs to item {connection_name}")
-
-            for upn in upns:
-                run_fab_command(
-                    f"acl set -f .connections/{connection_name}.Connection -I {upn} -R admin"
-                )
-
-    print(f"::endgroup::")
-
-    return connection_id
-
-
-def create_item(
-    workspace_name: str = None,
-    item_type: str = None,
-    item_name: str = None,
-    parameters: dict = None,
-):
-    """
-    Creates an item in the specified workspace.
-    Args:
-        workspace_name (str, optional): The name of the workspace where the item will be created.
-        item_type (str, optional): The type of the item to be created.
-        item_name (str, optional): The name of the item to be created.
-        parameters (dict, optional): A dictionary of parameters to be passed during item creation.
-    Returns:
-        str: The ID of the created item.
-    """
-
-    print(f"::group::Creating item {workspace_name}/{item_name}.{item_type}")
-
-    if parameters:
-        param_str = ",".join(f"{key}={value}" for key, value in parameters.items())
-        param_str = f"-P {param_str}"
-    else:
-        param_str = ""
-
-    run_fab_command(
-        f"create /{workspace_name}.workspace/{item_name}.{item_type} {param_str}",
-        silently_continue=True,
-    )
-
-    item_id = run_fab_command(
-        f"get /{workspace_name}.workspace/{item_name}.{item_type} -q id",
-        capture_output=True,
-    )
-
-    print(f"::endgroup::")
-
-    return item_id
-
-
-def deploy_item(
-    src_path,
-    workspace_name,
-    item_type: str = None,
-    item_name: str = None,
-    find_and_replace: dict = None,
-    what_if: bool = False,
-    func_after_staging=None,
-):
-    """
-    Deploys an item to a specified workspace.
-    Args:
-        src_path (str): The source path of the item to be deployed.
-        workspace_name (str): The name of the workspace where the item will be deployed.
-        item_type (str, optional): The type of the item. If not provided, it will be inferred from the platform data.
-        item_name (str, optional): The name of the item. If not provided, it will be inferred from the platform data.
-        find_and_replace (dict, optional): A dictionary where keys are tuples containing a file filter regex and a find regex,
-                                           and values are the replacement strings. This will be used to perform find and replace
-                                           operations on the files in the staging path.
-        what_if (bool, optional): If True, the deployment will be simulated but not actually performed. Defaults to False.
-        func_after_staging (callable, optional): A function to be called after the item is copied to the staging path. It should
-                                                 accept the staging path as its only argument.
-    Returns:
-        str: The ID of the deployed item if `what_if` is False. Otherwise, returns None.
-    """
-
-    print(f"::group::Deploying {src_path}")
-
-    staging_path = copy_to_staging(src_path)
-
-    # Call function that provides flexibility to change something in the staging files
-
-    if func_after_staging:
-        func_after_staging(staging_path)
-
-    if os.path.exists(os.path.join(staging_path, ".platform")):
-
-        with open(os.path.join(staging_path, ".platform"), "r") as file:
-            platform_data = json.load(file)
-
-        if item_name is None:
-            item_name = platform_data["metadata"]["displayName"]
-
-        if item_type is None:
-            item_type = platform_data["metadata"]["type"]
-
-    # Loop through all files and apply the find & replace with regular expressions
-
-    if find_and_replace:
-
-        for root, _, files in os.walk(staging_path):
-            for file in files:
-
-                file_path = os.path.join(root, file)
-
-                with open(file_path, "r") as file:
-                    text = file.read()
-
-                # Loop parameters and execute the find & replace in the ones that match the file path
-
-                for key, replace_value in find_and_replace.items():
-
-                    find_and_replace_file_filter = key[0]
-
-                    find_and_replace_file_find = key[1]
-
-                    if re.search(find_and_replace_file_filter, file_path):
-                        text, count_subs = re.subn(
-                            find_and_replace_file_find, replace_value, text
-                        )
-
-                        if count_subs > 0:
-
-                            print(
-                                f"Find & replace in file '{file_path}' with regex '{find_and_replace_file_find}'"
-                            )
-
-                            with open(file_path, "w") as file:
-                                file.write(text)
-
-    if not what_if:
-        run_fab_command(
-            f"import -f /{workspace_name}.workspace/{item_name}.{item_type} -i {staging_path}"
-        )
-
-        # Return id after deployment
-
-        item_id = run_fab_command(
-            f"get /{workspace_name}.workspace/{item_name}.{item_type} -q id",
-            capture_output=True,
-        )
-
-        return item_id
-
-    print(f"::endgroup::")
-
-
-def copy_to_staging(path):
-    """
-    Copies the contents of the specified directory to a staging folder.
-    This function ensures that a staging folder exists, and if it already exists,
-    it removes the existing staging folder and creates a new one. It then copies
-    all files and directories from the specified path to the staging folder.
-    Args:
-        path (str): The path of the directory to be copied to the staging folder.
-    Returns:
-        str: The path to the staging folder where the contents have been copied.
-    """
-
-    # ensure staging folder exists
-
-    current_folder = os.path.dirname(__file__)
-    
-    path_staging = os.path.join(current_folder, "_stg", os.path.basename(path))
-
-    if os.path.exists(path_staging):
-        shutil.rmtree(path_staging)
-
-    os.makedirs(path_staging)
-
-    # copy files to staging folder
-
-    shutil.copytree(
-        path, path_staging, dirs_exist_ok=True, ignore=shutil.ignore_patterns("*.abf")
-    )
-
-    return path_staging
+    return output
