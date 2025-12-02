@@ -35,22 +35,16 @@ def run_fab_command(cmd):
 def fab_authenticate_spn():
     print("Authenticating with SPN...")
 
-    client_id = os.getenv("FABRIC_CLIENT_ID")
-    client_secret = os.getenv("FABRIC_CLIENT_SECRET")
-    tenant_id = os.getenv("FABRIC_TENANT_ID")
+    if not os.getenv("FABRIC_CLIENT_ID") or not os.getenv("FABRIC_CLIENT_SECRET") or not os.getenv("FABRIC_TENANT_ID"):
+        raise Exception("Missing SPN env variables.")
 
-    if not client_id or not client_secret or not tenant_id:
-        raise Exception("Missing Fabric SPN environment variables.")
-
-    # 🟢 Non-interactive SPN login for the binary Fabric CLI
-    run_fab_command(
-        f"auth login "
-        f"--client-id {client_id} "
-        f"--client-secret {client_secret} "
-        f"--tenant-id {tenant_id}"
-    )
+    # ⚠️ IMPORTANT :
+    # fab auth login MUST be called with NO FLAGS
+    # and SPN detection will happen automatically
+    run_fab_command("auth login --service-principal-secret")
 
     print("SPN authentication successful.")
+
 
 
 # -----------------------------------------------------------
