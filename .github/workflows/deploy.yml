@@ -25,43 +25,52 @@ on:
 
 jobs:
   deploy:
-    name: 🌐 Deploy Report + Semantic Model
+    name: 🌐 Deploy to Fabric (Semantic Model + Report)
     runs-on: ubuntu-latest
 
     steps:
-      
+      # 1) Checkout code
       - name: 📥 Checkout repository
         uses: actions/checkout@v4
 
+      # 2) Install Python
       - name: 🐍 Install Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.12"
 
+      # 3) Install Fabric CLI (binary version)
       - name: 📦 Install Fabric CLI
         run: |
-          python -m pip install ms-fabric-cli
+          wget https://aka.ms/fabriccli_linux -O fabric
+          chmod +x fabric
+          sudo mv fabric /usr/local/bin/fab
+          fab --version
 
-      - name: 🔧 Install Python dependencies
+      # 4) Install Python dependencies (if any)
+      - name: 📚 Install Python requirements
         run: |
-          pip install -r ./scripts/requirements.txt || true
+          pip install -r scripts/requirements.txt || true
 
-      - name: 🚀 Run deployment script
+      # 5) Deploy (dev or prd)
+      - name: 🚀 Run Deployment Script
         env:
           FABRIC_CLIENT_ID: ${{ secrets.FABRIC_CLIENT_ID }}
           FABRIC_CLIENT_SECRET: ${{ secrets.FABRIC_CLIENT_SECRET }}
           FABRIC_TENANT_ID: ${{ secrets.FABRIC_TENANT_ID }}
         run: |
           if [ "${{ github.event.inputs.environment }}" = "dev" ]; then
-              python scripts/deploy-dev.py \
-                --spn-auth \
-                --workspace "${{ github.event.inputs.workspace }}" \
-                --capacity "${{ github.event.inputs.capacity }}" \
-                --admin-upns "${{ github.event.inputs.admin_upns }}"
+            echo "Deploying to DEV..."
+            python scripts/deploy-dev.py \
+              --spn-auth \
+              --workspace "${{ github.event.inputs.workspace }}" \
+              --capacity "${{ github.event.inputs.capacity }}" \
+              --admin-upns "${{ github.event.inputs.admin_upns }}"
           else
-              python scripts/deploy-prd.py \
-                --spn-auth \
-                --workspace "${{ github.event.inputs.workspace }}" \
-                --capacity "${{ github.event.inputs.capacity }}" \
-                --admin-upns "${{ github.event.inputs.admin_upns }}"
+            echo "Deploying to PROD..."
+            python scripts/deploy-prd.py \
+              --spn-auth \
+              --workspace "${{ github.event.inputs.workspace }}" \
+              --capacity "${{ github.event.inputs.capacity }}" \
+              --admin-upns "${{ github.event.inputs.admin_upns }}"
           fi
