@@ -1,0 +1,15 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/1.1.0/schema.json",
+  "displayName": "pbi_test",
+  "description": "",
+  "type": "Report",
+  "definitionVersion": "2.1.0",
+  "datasetReference": {
+    "byPath": {
+      "path": "../pbi_test.SemanticModel"
+    }
+  },
+  "publishInfo": {
+    "state": "Draft"
+  }
+}
