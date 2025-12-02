@@ -42,9 +42,9 @@ def fab_authenticate_spn():
     if not client_id or not client_secret or not tenant_id:
         raise Exception("Missing Fabric SPN environment variables.")
 
-    # Modern Fabric CLI login - ONLY this is needed
+    # ⬅️ COMMANDE À JOUR
     run_fab_command(
-        f"login "
+        f"auth login "
         f"--client-id {client_id} "
         f"--client-secret {client_secret} "
         f"--tenant-id {tenant_id}"
