@@ -10,9 +10,7 @@ Set-Location $path
 
 if ($src) {
 
-    #
-    # Download PBI Inspector CLI (if needed)
-    #
+    # Download PBI Inspector (PBIR analysis engine)
 
     $destinationPath = "$currentFolder\_tools\PBIInspector"
 
@@ -33,33 +31,29 @@ if ($src) {
         Remove-Item $zipFile          
     }    
     
-    #
     # Load BPA rules
-    #
-
     $rulesPath = "$currentFolder\bpa-report-rules.json"
 
     if (!(Test-Path $rulesPath))
     {
         Write-Host "Downloading default BPA rules"
     
-        Invoke-WebRequest `
-            -Uri "https://raw.githubusercontent.com/NatVanG/PBI-InspectorV2/refs/heads/main/Rules/Base-rules.json" `
+        Invoke-WebRequest -Uri "https://raw.githubusercontent.com/NatVanG/PBI-InspectorV2/refs/heads/main/Rules/Base-rules.json" `
             -OutFile "$destinationPath\bpa-report-rules.json"
         
         $rulesPath = "$destinationPath\bpa-report-rules.json"
     }
 
-    #
-    # Run BPA rules on each PBIR report
-    #
+    # ================================================
+    #               FIX APPLIQUÉ ICI
+    # ================================================
 
-    # 🔥 FIX 1 — Find real PBIR reports (definition.pbir)
+    # Find all PBIR reports (definition.pbir)
     $itemsFolders = Get-ChildItem -Path $src -Recurse -Filter "definition.pbir"
 
     foreach ($itemFolder in $itemsFolders) {
 
-        # 🔥 FIX 2 — Use the folder containing definition.pbir directly
+        # The actual report root is the directory containing definition.pbir
         $itemPath = $itemFolder.Directory.FullName
 
         Write-Host "Running BPA rules for: '$itemPath'"
