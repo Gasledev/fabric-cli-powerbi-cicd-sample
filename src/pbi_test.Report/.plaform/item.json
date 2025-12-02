@@ -5,8 +5,9 @@
   "type": "Report",
   "definitionVersion": "2.1.0",
   "datasetReference": {
-    "byPath": {
-      "path": "../pbi_test.SemanticModel"
+    "byId": {
+      "workspace": "ae4cf200-79b9-4220-82af-dbb1994e624b",
+      "id": "1e1acc70-02b4-451f-b9bc-0a476b577c45"
     }
   },
   "publishInfo": {
