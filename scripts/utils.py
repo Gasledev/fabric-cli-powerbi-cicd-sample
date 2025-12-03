@@ -1,257 +1,221 @@
 import os
-import sys
-import base64
 import json
-from typing import List, Dict, Optional
-
+import time
 import requests
 
-# Base Fabric REST API
-FABRIC_API_BASE = "https://api.fabric.microsoft.com/v1"
+FABRIC_API = "https://api.fabric.microsoft.com/v1"
 
 
-class FabricAuthError(Exception):
-    """Authentication/Token errors."""
-    pass
+# =====================================================================
+# AUTHENTICATION
+# =====================================================================
 
-
-class FabricApiError(Exception):
-    """Fabric REST API call errors."""
-    pass
-
-
-def _get_env_or_fail(name: str) -> str:
-    """Get an env var or raise a clear error."""
-    value = os.getenv(name)
-    if not value:
-        raise FabricAuthError(f"Missing environment variable: {name}")
-    return value
-
-
-def get_access_token_spn() -> str:
+def fabric_post_token():
     """
-    Récupère un access token Microsoft Entra pour Fabric en client_credentials
-    (Service Principal) vers le scope Fabric: https://api.fabric.microsoft.com/.default
+    Authenticate using Service Principal via OAuth2 client_credentials
+    and return access token.
     """
-    tenant_id = _get_env_or_fail("FABRIC_TENANT_ID")
-    client_id = _get_env_or_fail("FABRIC_CLIENT_ID")
-    client_secret = _get_env_or_fail("FABRIC_CLIENT_SECRET")
+    tenant = os.environ.get("FABRIC_TENANT_ID")
+    client_id = os.environ.get("FABRIC_CLIENT_ID")
+    client_secret = os.environ.get("FABRIC_CLIENT_SECRET")
 
-    token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
+    print("Authenticating with Service Principal (client_credentials)...")
+
+    url = f"https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
+
     data = {
         "grant_type": "client_credentials",
         "client_id": client_id,
         "client_secret": client_secret,
-        # Scope générique pour les APIs Fabric en client credentials
-        # cf. discussions communautaires :contentReference[oaicite:1]{index=1}
-        "scope": "https://api.fabric.microsoft.com/.default",
+        "scope": "https://api.fabric.microsoft.com/.default"
     }
 
-    resp = requests.post(token_url, data=data)
+    resp = requests.post(url, data=data)
+
     if resp.status_code != 200:
-        raise FabricAuthError(
-            f"Failed to acquire token. HTTP {resp.status_code}: {resp.text}"
+        raise Exception(
+            f"❌ AUTH ERROR: {resp.status_code}\n{resp.text}"
         )
 
     token = resp.json().get("access_token")
-    if not token:
-        raise FabricAuthError("Token response does not contain 'access_token'.")
+    print("✅ SPN authentication successful.")
     return token
 
 
-def fabric_request(method: str, path: str, token: str, **kwargs) -> requests.Response:
+# =====================================================================
+# GENERIC FABRIC REQUEST WRAPPER
+# =====================================================================
+
+def fabric_request(method, endpoint, **kwargs):
     """
-    Appelle l’API Fabric REST (Core) :
-      - Ajoute automatiquement le header Authorization: Bearer <token>
-      - Lève une exception si le status HTTP n’est pas 2xx
+    Wrapper around Fabric REST API with auth and error handling.
+    Always prints raw error if API returns unexpected response.
     """
-    url = f"{FABRIC_API_BASE}/{path.lstrip('/')}"
+
+    token = fabric_post_token()  # Always fetch fresh token
+    url = FABRIC_API + endpoint
+
     headers = kwargs.pop("headers", {})
     headers["Authorization"] = f"Bearer {token}"
 
-    # Si on envoie un body, on s’assure du content-type JSON
-    if "json" in kwargs and "Content-Type" not in headers:
-        headers["Content-Type"] = "application/json"
-
-    print(f"Calling Fabric API: {method} {url}")
     resp = requests.request(method, url, headers=headers, **kwargs)
 
-    if not resp.ok:
+    if not (200 <= resp.status_code < 300):
+        print("❌ FABRIC API ERROR")
+        print("URL:", url)
+        print("Status:", resp.status_code)
+        print("Headers:", resp.headers)
+        print("Body:", resp.text)
         raise FabricApiError(
-            f"{method} {url} failed. "
-            f"HTTP {resp.status_code}: {resp.text}"
+            f"{method} {url} failed. HTTP {resp.status_code}: {resp.text}"
         )
 
     return resp
 
 
-def get_or_create_workspace(
-    workspace_name: str,
-    token: str,
-    capacity_id: Optional[str] = None,
-) -> str:
-    """
-    1. Liste les workspaces (GET /workspaces) :contentReference[oaicite:2]{index=2}
-    2. Si un workspace avec displayName == workspace_name existe -> retourne son id
-    3. Sinon, crée le workspace (POST /workspaces) :contentReference[oaicite:3]{index=3}
-    """
-    # 1. List workspaces
-    resp = fabric_request("GET", "workspaces", token)
-    data = resp.json()
+# =====================================================================
+# CUSTOM EXCEPTION TYPE
+# =====================================================================
 
-    # Selon la doc Fabric, les collections sont typiquement dans 'value'
-    workspaces = data.get("value", data.get("workspaces", []))
+class FabricApiError(Exception):
+    pass
 
+
+# =====================================================================
+# WORKSPACE MANAGEMENT
+# =====================================================================
+
+def create_workspace(workspace_name, capacity_name, admin_upns):
+    """
+    Create or retrieve Fabric workspace ID by name.
+    """
+
+    print(f"Calling Fabric API: GET {FABRIC_API}/workspaces")
+    resp = fabric_request("GET", "/workspaces")
+    workspaces = resp.json()
+
+    # Already exists?
     for ws in workspaces:
-        if ws.get("displayName") == workspace_name:
-            ws_id = ws.get("id")
-            print(f"Workspace '{workspace_name}' already exists (id={ws_id}).")
-            return ws_id
+        if ws["displayName"] == workspace_name:
+            print(f"Workspace '{workspace_name}' already exists (id={ws['id']}).")
+            return ws["id"]
 
-    # 2. Create workspace
-    body: Dict[str, object] = {"displayName": workspace_name}
-    if capacity_id:
-        body["capacityId"] = capacity_id
-
+    # Create workspace
     print(f"Creating workspace '{workspace_name}'...")
-    resp = fabric_request("POST", "workspaces", token, json=body)
-    ws = resp.json()
-    ws_id = ws["id"]
-    print(f"Workspace created (id={ws_id}).")
-    return ws_id
+    body = {"displayName": workspace_name}
+
+    resp = fabric_request("POST", "/workspaces", json=body)
+    new_ws = resp.json()
+    print(f"Workspace created (id={new_ws['id']}).")
+
+    return new_ws["id"]
 
 
-def list_items_by_type(
-    workspace_id: str,
-    item_type: str,
-    token: str,
-) -> List[Dict]:
-    """
-    Liste les items d’un workspace filtrés par type (Report, SemanticModel, ...) :contentReference[oaicite:4]{index=4}
-      GET /workspaces/{workspaceId}/items?type={item_type}
-    """
-    path = f"workspaces/{workspace_id}/items?type={item_type}"
-    resp = fabric_request("GET", path, token)
-    data = resp.json()
-    return data.get("value", data.get("items", []))
+# =====================================================================
+# ITEM CREATION / UPDATE (SEMANTIC MODEL / REPORT)
+# =====================================================================
 
-
-def build_definition_parts_from_folder(folder: str) -> List[Dict[str, str]]:
-    """
-    Construit la liste des 'parts' pour un Item Definition à partir d'un dossier PBIP :
-      - parcourt tous les fichiers (definition/, StaticResources/, .platform, etc.)
-      - crée un part par fichier:
-          path       = chemin relatif (style 'definition/report.json')
-          payload    = fichier encodé en base64
-          payloadType= InlineBase64 (unique valeur supportée) :contentReference[oaicite:5]{index=5}
-    """
-    parts: List[Dict[str, str]] = []
-
-    for root, _, files in os.walk(folder):
-        for filename in files:
-            full_path = os.path.join(root, filename)
-            rel_path = os.path.relpath(full_path, folder).replace("\\", "/")
-
-            with open(full_path, "rb") as f:
-                content = f.read()
-
-            b64 = base64.b64encode(content).decode("ascii")
-            parts.append(
-                {
-                    "path": rel_path,
-                    "payload": b64,
-                    "payloadType": "InlineBase64",
-                }
-            )
-
-    if not parts:
-        raise ValueError(f"No files found in PBIP folder: {folder}")
-
-    return parts
-
-
-def create_or_update_item_from_folder(
-    workspace_id: str,
-    folder: str,
-    item_type: str,
-    token: str,
-) -> str:
-    display_name = os.path.basename(folder)
-    if "." in display_name:
-        display_name = display_name.split(".", 1)[0]
-
-    print(f"\n=== Publishing {item_type} from folder: {folder}")
+def create_or_update_item_from_folder(workspace_id, folder_path, item_type):
+    display_name = os.path.basename(folder_path).split(".")[0]
+    print(f"=== Publishing {item_type} from folder: {folder_path}")
     print(f"Item displayName = {display_name}")
 
-    parts = build_definition_parts_from_folder(folder)
-    definition = {"parts": parts}
+    # Check definition folder
+    definition_path = os.path.join(folder_path, "definition")
+    if not os.path.exists(definition_path):
+        raise FabricApiError(f"❌ Definition folder missing: {definition_path}")
 
-    # Check if exists
-    existing_items = list_items_by_type(workspace_id, item_type, token)
-    item_id = None
-    for it in existing_items:
-        if it.get("displayName") == display_name:
-            item_id = it["id"]
-            break
+    # Fetch existing items
+    print(f"Calling Fabric API: GET {FABRIC_API}/workspaces/{workspace_id}/items?type={item_type}")
+    resp = fabric_request(
+        "GET",
+        f"/workspaces/{workspace_id}/items?type={item_type}"
+    )
 
-    # -------------------------
-    # CASE 1 : CREATE
-    # -------------------------
-    if item_id is None:
-        body = {
-            "displayName": display_name,
-            "type": item_type,
-            "definition": definition,
+    existing = None
+    try:
+        items = resp.json() or []
+        for it in items:
+            if it.get("displayName") == display_name:
+                existing = it
+                break
+    except Exception as ex:
+        print("❌ ERROR reading existing items:", ex)
+        print("Raw GET response:", resp.text)
+
+    # =====================================================================
+    # UPDATE EXISTING ITEM
+    # =====================================================================
+
+    if existing:
+        item_id = existing["id"]
+        print(f"🔄 Updating existing {item_type} '{display_name}' (id={item_id})")
+
+        print(f"Calling Fabric API: POST /items/{item_id}/updateDefinition")
+
+        files = {
+            "definition": open(os.path.join(folder_path, "definition.pbir"), "rb")
         }
 
         resp = fabric_request(
             "POST",
-            f"workspaces/{workspace_id}/items",
-            token,
-            json=body,
+            f"/workspaces/{workspace_id}/items/{item_id}/updateDefinition?updateMetadata=false",
+            files=files
         )
 
-        # Try parsing JSON
+        # Handle null response
         try:
-            item = resp.json()
-        except Exception:
-            item = None
+            json_resp = resp.json()
+        except:
+            json_resp = None
 
-        if not item or "id" not in item:
-            print("\n❌ FABRIC DID NOT RETURN A VALID ITEM ON CREATION")
+        if not json_resp:
+            print("⚠️ WARNING: Fabric returned NO JSON for update.")
+            print("HTTP status:", resp.status_code)
+            print("Headers:", resp.headers)
             print("Raw response:")
             print(resp.text)
-            raise FabricApiError(
-                f"Fabric failed to create {item_type} '{display_name}'."
-            )
+            print("Continuing anyway...")
+            return
 
-        item_id = item["id"]
-        print(f"✅ Created {item_type} '{display_name}' (id={item_id})")
-        return item_id
+        print(f"✅ Updated {item_type} '{display_name}'")
+        return
 
-    # -------------------------
-    # CASE 2 : UPDATE
-    # -------------------------
-    body = {"definition": definition}
+    # =====================================================================
+    # CREATE NEW ITEM
+    # =====================================================================
+
+    print(f"🆕 Creating new {item_type} '{display_name}'")
+    print(f"Calling Fabric API: POST /items")
+
+    files = {
+        "item": open(os.path.join(folder_path, "item.json"), "rb"),
+        "definition": open(os.path.join(folder_path, "definition.pbir"), "rb")
+    }
 
     resp = fabric_request(
         "POST",
-        f"workspaces/{workspace_id}/items/{item_id}/updateDefinition?updateMetadata=false",
-        token,
-        json=body,
+        f"/workspaces/{workspace_id}/items",
+        files=files
     )
 
-    # patch : check update response too
+    # Detect null response
     try:
-        result = resp.json()
-    except Exception:
-        result = None
+        item = resp.json()
+    except:
+        item = None
 
-    if result is None:
-        print("\n⚠️ WARNING: Fabric returned NO JSON for update.")
+    if not item or "id" not in item:
+        print("❌ FABRIC DID NOT RETURN A VALID ITEM ON CREATION")
+        print("HTTP status:", resp.status_code)
+        print("Headers:", resp.headers)
         print("Raw response:")
         print(resp.text)
-        print("Continuing anyway...")
+        raise FabricApiError(f"Fabric failed to create {item_type} '{display_name}'.")
 
-    print(f"🔄 Updated {item_type} '{display_name}' (id={item_id})")
-    return item_id
+    print(f"🎉 Created {item_type} '{display_name}' (id={item['id']})")
+
+
+# =====================================================================
+# END OF FILE
+# =====================================================================
