@@ -1,0 +1,150 @@
+{
+  "version": "1.1.0",
+  "diagrams": [
+    {
+      "ordinal": 0,
+      "scrollPosition": {
+        "x": 0,
+        "y": 0
+      },
+      "nodes": [
+        {
+          "location": {
+            "x": 35,
+            "y": 0
+          },
+          "nodeIndex": "Product",
+          "nodeLineageTag": "58a53a47-8e1e-419c-9165-066259ce1fd4",
+          "size": {
+            "height": 227,
+            "width": 234
+          },
+          "zIndex": 2
+        },
+        {
+          "location": {
+            "x": 63,
+            "y": 412.25
+          },
+          "nodeIndex": "Salesperson",
+          "nodeLineageTag": "2dadd773-eb36-4523-8674-dca435ff21ef",
+          "size": {
+            "height": 200,
+            "width": 234
+          },
+          "zIndex": 3
+        },
+        {
+          "location": {
+            "x": 698,
+            "y": 0
+          },
+          "nodeIndex": "Shop",
+          "nodeLineageTag": "6390cd17-ce46-4e20-8c16-3f9b437a2b64",
+          "size": {
+            "height": 265.25,
+            "width": 234
+          },
+          "zIndex": 1
+        },
+        {
+          "location": {
+            "x": 697,
+            "y": 406.125
+          },
+          "nodeIndex": "Customer",
+          "nodeLineageTag": "1b2c2629-8895-44b1-bd9d-291db0614062",
+          "size": {
+            "height": 262,
+            "width": 234
+          },
+          "zIndex": 4
+        },
+        {
+          "location": {
+            "x": 354,
+            "y": 0
+          },
+          "nodeIndex": "TF Transactionnelle",
+          "size": {
+            "height": 575,
+            "width": 234
+          },
+          "zIndex": 5
+        },
+        {
+          "location": {
+            "x": 986.17735042735058,
+            "y": 418.41079059829053
+          },
+          "nodeIndex": "DateTable",
+          "nodeLineageTag": "6aa7c0a7-7c07-4494-9d5a-71e707ca154f",
+          "size": {
+            "height": 406.03632478632483,
+            "width": 234
+          },
+          "zIndex": 6
+        },
+        {
+          "location": {
+            "x": 1235.1773504273506,
+            "y": 276.22355769230768
+          },
+          "nodeIndex": "OrderHeader",
+          "nodeLineageTag": "efec6da4-b00d-4f9e-a3a5-3036bd4b3c80",
+          "size": {
+            "height": 272,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1484.1773504273506,
+            "y": 336.22355769230768
+          },
+          "nodeIndex": "Size/OpeningDate",
+          "nodeLineageTag": "1a94745e-6e37-4429-b631-e7ff361c2da7",
+          "size": {
+            "height": 152,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1733.1773504273506,
+            "y": 336.22355769230768
+          },
+          "nodeIndex": "City/Country/Continent",
+          "nodeLineageTag": "da02ab9e-bb17-4616-858c-cd79dfea123a",
+          "size": {
+            "height": 152,
+            "width": 234
+          },
+          "zIndex": 0
+        },
+        {
+          "location": {
+            "x": 1982.1773504273506,
+            "y": 312.22355769230768
+          },
+          "nodeIndex": "MesureTable",
+          "size": {
+            "height": 200,
+            "width": 234
+          },
+          "zIndex": 0
+        }
+      ],
+      "name": "Toutes les tables",
+      "zoomValue": 64.551724137931032,
+      "pinKeyFieldsToTop": false,
+      "showExtraHeaderInfo": false,
+      "hideKeyFieldsWhenCollapsed": false,
+      "tablesLocked": false
+    }
+  ],
+  "selectedDiagram": "Toutes les tables",
+  "defaultDiagram": "Toutes les tables"
+}
